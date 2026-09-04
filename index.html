@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="preload" href="./astronauta.glb" as="fetch" type="model/gltf-binary" crossorigin="anonymous" />
-  <title>Astronaut Viewer — three.js debug scene</title>
+  <title>Society Of Visual Originators</title>
   <style>
     html,
     body {
@@ -116,10 +116,38 @@
     scene.background = new THREE.Color(0x000000);
     scene.environmentIntensity = 1;
 
+    const isMobile = () => window.innerWidth <= 768;
+
+    const frameOneTarget = new THREE.Vector3(-5.44, 3.46, 0.09);
+    const desktopFrameOnePos = new THREE.Vector3(1.50, 3.67, 0.14);
+    // Moving the camera back by 40% along the viewing axis away from the target for mobile view:
+    const mobileFrameOnePos = new THREE.Vector3()
+      .subVectors(desktopFrameOnePos, frameOneTarget)
+      .multiplyScalar(1.4)
+      .add(frameOneTarget);
+
+    function getFrameOnePosition() {
+      return isMobile() ? mobileFrameOnePos : desktopFrameOnePos;
+    }
+
+    const introDescent = {
+      active: false,
+      elapsed: 0,
+      duration: 2.2,
+      offsetY: 3.5,
+      startPosition: new THREE.Vector3(),
+      endPosition: new THREE.Vector3(),
+    };
+
+    function getAboveFrameOnePosition() {
+      const pos = getFrameOnePosition();
+      return new THREE.Vector3(pos.x, pos.y + introDescent.offsetY, pos.z);
+    }
+
     const camera = new THREE.PerspectiveCamera(
       22, window.innerWidth / window.innerHeight, 0.05, 500
     );
-    camera.position.set(1.50, 3.67, 0.14);
+    camera.position.copy(getAboveFrameOnePosition());
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -215,7 +243,7 @@
     );
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(-5.44, 3.46, 0.09);
+    controls.target.copy(frameOneTarget);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.minDistance = 0.3;
@@ -285,9 +313,9 @@
       speed: 0.4,
       phase: 0,
       range: 20,
-      pauseDuration: 0.01,
+      pauseDuration: 0.30,
       pauseRemaining: 0,
-      maxPasses: 2,
+      maxPasses: Infinity,
       passCount: 0,
     };
     const lightSweepBaseIntensity = {
@@ -313,11 +341,39 @@
     spotLight.intensity = lightSweepBaseIntensity.spot;
     hemiLight.intensity = hemiBaseIntensity;
 
+    function startIntroDescent() {
+      const targetPos = getFrameOnePosition();
+      introDescent.startPosition.set(targetPos.x, targetPos.y + introDescent.offsetY, targetPos.z);
+      introDescent.endPosition.copy(targetPos);
+      introDescent.elapsed = 0;
+      introDescent.active = true;
+      camera.position.copy(introDescent.startPosition);
+      controls.target.copy(frameOneTarget);
+      controls.update();
+    }
+
+    function updateIntroDescent(dt) {
+      if (!introDescent.active) return;
+      introDescent.elapsed = Math.min(introDescent.elapsed + dt, introDescent.duration);
+      const t = introDescent.elapsed / introDescent.duration;
+      // Smooth cubic ease-out
+      const progress = 1 - Math.pow(1 - t, 3);
+      camera.position.lerpVectors(introDescent.startPosition, introDescent.endPosition, progress);
+      controls.target.copy(frameOneTarget);
+      if (t >= 1) {
+        introDescent.active = false;
+        camera.position.copy(introDescent.endPosition);
+        animationCamera.startPosition.copy(introDescent.endPosition);
+        animationCamera.startTarget.copy(frameOneTarget);
+      }
+    }
+
     function beginFrameOnePreloader() {
       const entry = findAstronautEntry();
       frameOnePreloader.ready = true;
       frameOnePreloader.active = true;
       frameOnePreloader.elapsed = 0;
+      startIntroDescent();
       keyLight.intensity = lightSweepBaseIntensity.key;
       spotLight.intensity = lightSweepBaseIntensity.spot;
       hemiLight.intensity = hemiBaseIntensity;
@@ -350,32 +406,17 @@
     }
 
     function updateLightSweep(dt) {
+      if (!frameOnePreloader.ready) return;
+      if (!lightSweepSettings.enabled) return;
+
       if (frameOnePreloader.active) {
         frameOnePreloader.elapsed = Math.min(frameOnePreloader.elapsed + dt, frameOnePreloader.duration);
-        const linearProgress = frameOnePreloader.elapsed / frameOnePreloader.duration;
-        const progress = linearProgress * linearProgress * (3 - 2 * linearProgress);
-        lightSweepSettings.phase = linearProgress;
-        keyLight.target.position.z = lightSweepSettings.range - progress * lightSweepSettings.range * 2;
-        spotLight.position.z = -lightSweepSettings.range + progress * lightSweepSettings.range * 2;
-        keyLight.intensity = lightSweepBaseIntensity.key;
-        spotLight.intensity = lightSweepBaseIntensity.spot;
-        hemiLight.intensity = hemiBaseIntensity;
-        scene.environmentIntensity = environmentBaseIntensity;
-        if (linearProgress >= 1) {
+        if (frameOnePreloader.elapsed >= frameOnePreloader.duration) {
           frameOnePreloader.active = false;
-          lightSweepSettings.phase = 0;
-          keyLight.target.position.z = lightSweepSettings.range;
-          spotLight.position.z = -lightSweepSettings.range;
-          keyLight.intensity = lightSweepBaseIntensity.key;
-          spotLight.intensity = lightSweepBaseIntensity.spot;
-          hemiLight.intensity = hemiBaseIntensity;
-          scene.environmentIntensity = environmentBaseIntensity;
           if (frameOnePreloader.ready) playAstronautSequence();
         }
-        return;
       }
-      if (!frameOnePreloader.ready) return;
-      if (!lightSweepSettings.enabled || cinematicSequence.phase !== 'idle') return;
+
       if (lightSweepSettings.pauseRemaining > 0) {
         const pauseDuration = Math.max(0.01, lightSweepSettings.pauseDuration);
         lightSweepSettings.pauseRemaining = Math.max(0, lightSweepSettings.pauseRemaining - dt);
@@ -396,16 +437,19 @@
         }
         return;
       }
+
       lightSweepSettings.phase = Math.min(1, lightSweepSettings.phase + dt * lightSweepSettings.speed);
-      const progress = lightSweepSettings.phase;
+      const progress = lightSweepSettings.phase * lightSweepSettings.phase * (3 - 2 * lightSweepSettings.phase);
       keyLight.target.position.z = lightSweepSettings.range - progress * lightSweepSettings.range * 2;
       spotLight.position.z = -lightSweepSettings.range + progress * lightSweepSettings.range * 2;
       keyLight.intensity = lightSweepBaseIntensity.key;
       spotLight.intensity = lightSweepBaseIntensity.spot;
-      if (lightSweepSettings.phase === 1) {
+      hemiLight.intensity = hemiBaseIntensity;
+      scene.environmentIntensity = environmentBaseIntensity;
+
+      if (lightSweepSettings.phase >= 1) {
         lightSweepSettings.passCount += 1;
-        if (lightSweepSettings.passCount >= lightSweepSettings.maxPasses) {
-          // Done — leave lights where they ended, disable sweep
+        if (lightSweepSettings.maxPasses !== Infinity && lightSweepSettings.passCount >= lightSweepSettings.maxPasses) {
           lightSweepSettings.enabled = false;
         } else {
           lightSweepSettings.pauseRemaining = Math.max(0.01, lightSweepSettings.pauseDuration);
@@ -554,10 +598,12 @@
         material.size = size;
       });
       animationCamera.active = false;
+      introDescent.active = false;
       controls.enabled = true;
-      camera.position.copy(animationCamera.startPosition);
-      controls.target.copy(animationCamera.startTarget);
-      camera.fov = animationCamera.startFov;
+      camera.position.copy(getFrameOnePosition());
+      controls.target.copy(frameOneTarget);
+      controls.update();
+      camera.fov = animationCamera.startFov || 22;
       camera.updateProjectionMatrix();
       if (entry && entry.activeAction) {
         entry.activeAction.stop();
@@ -1104,6 +1150,13 @@
     camFolder.add(camSettings, 'targetZ', -30, 30, 0.01).name('Look-At Z').listen().onChange(applyCamTarget);
     camFolder.add(camSettings, 'flySpeed', 0.5, 15, 0.1).name('Fly Speed');
 
+    const introFolder = camFolder.addFolder('Intro Descent');
+    introFolder.add(introDescent, 'duration', 0.5, 6, 0.1).name('Duration (s)');
+    introFolder.add(introDescent, 'offsetY', 0, 10, 0.1).name('Height Offset').onChange(() => {
+      if (startupSequence.active) camera.position.copy(getAboveFrameOnePosition());
+    });
+    introFolder.add({ replay: () => startIntroDescent() }, 'replay').name('Replay Descent');
+
     function applyCamPos() {
       camera.position.set(camSettings.posX, camSettings.posY, camSettings.posZ);
     }
@@ -1165,6 +1218,22 @@
       renderer.setSize(w, h);
       composer.setSize(w, h);
       bloomPass.setSize(w, h);
+
+      if (startupSequence.active) {
+        camera.position.copy(getAboveFrameOnePosition());
+        controls.target.copy(frameOneTarget);
+        controls.update();
+      } else if (introDescent.active) {
+        const targetPos = getFrameOnePosition();
+        introDescent.startPosition.set(targetPos.x, targetPos.y + introDescent.offsetY, targetPos.z);
+        introDescent.endPosition.copy(targetPos);
+      } else if (frameOnePreloader.active) {
+        camera.position.copy(getFrameOnePosition());
+        controls.target.copy(frameOneTarget);
+        controls.update();
+        animationCamera.startPosition.copy(camera.position);
+        animationCamera.startTarget.copy(controls.target);
+      }
     });
 
     /* --------------------------------------------------------------------- */
@@ -1178,7 +1247,8 @@
       const dt = Math.min(clock.getDelta(), 0.1);
 
       updateStartupSequence(dt);
-      if (!startupSequence.active && cinematicSequence.phase === 'idle' && !frameOnePreloader.active) updateFlyMovement(dt);
+      updateIntroDescent(dt);
+      if (!startupSequence.active && cinematicSequence.phase === 'idle' && !frameOnePreloader.active && !introDescent.active) updateFlyMovement(dt);
       updateCinematicSequence(dt);
       updateLightSweep(dt);
       controls.update();

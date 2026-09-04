@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preload" href="./astronauta.glb" as="fetch" type="model/gltf-binary" crossorigin="anonymous" />
+  <title>Astronaut Viewer — three.js debug scene</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      width: 100%;
+      height: 100%;
+      background: #05070d;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #cinematicBlack {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: #000;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #startupLoader {
+      position: fixed;
+      inset: 0;
+      z-index: 300;
+      display: grid;
+      place-items: center;
+      background: #000;
+      color: #eef7ff;
+      opacity: 1;
+      pointer-events: auto;
+      transition: opacity 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    #startupLoader.is-hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .startup-loader__text {
+      position: relative;
+      font: 500 clamp(16px, 2vw, 24px)/1 sans-serif;
+      letter-spacing: 4px;
+      text-indent: 4px;
+      text-transform: uppercase;
+      overflow: hidden;
+      background: linear-gradient(90deg, #000, #fff, #000);
+      background-repeat: no-repeat;
+      background-size: 80%;
+      animation: loading-scan 3s linear infinite;
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: rgba(255, 255, 255, 0);
+      color: transparent;
+    }
+
+    @keyframes loading-scan {
+      0% {
+        background-position: -500%;
+      }
+
+      100% {
+        background-position: 500%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="cinematicBlack"></div>
+  <div id="startupLoader">
+    <div class="startup-loader__text" data-label="LOADING">SOCIETY OF VISUAL ORIGINATORS</div>
+  </div>
+
+  <script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "lil-gui": "https://unpkg.com/lil-gui@0.19.2/dist/lil-gui.esm.js"
+  }
+}
+</script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { TransformControls } from 'three/addons/controls/TransformControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+    import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+    import GUI from 'lil-gui';
+
+    /* --------------------------------------------------------------------- */
+    /*  BASIC SETUP                                                           */
+    /* --------------------------------------------------------------------- */
+
+    const container = document.body;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+    scene.environmentIntensity = 1;
+
+    const camera = new THREE.PerspectiveCamera(
+      22, window.innerWidth / window.innerHeight, 0.05, 500
+    );
+    camera.position.set(1.50, 3.67, 0.14);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 3.0;
+    container.appendChild(renderer.domElement);
+
+    function createStarField(count, radius, size, opacity, brightness = 1) {
+      const positions = new Float32Array(count * 3);
+      const colors = new Float32Array(count * 3);
+      const color = new THREE.Color();
+      for (let index = 0; index < count; index += 1) {
+        const direction = new THREE.Vector3(
+          THREE.MathUtils.randFloatSpread(2),
+          THREE.MathUtils.randFloatSpread(2),
+          THREE.MathUtils.randFloatSpread(2)
+        ).normalize();
+        const distance = radius + THREE.MathUtils.randFloatSpread(radius * 0.12);
+        positions[index * 3] = direction.x * distance;
+        positions[index * 3 + 1] = direction.y * distance;
+        positions[index * 3 + 2] = direction.z * distance;
+        const isWarm = Math.random() < 0.16;
+        color.setHSL(
+          isWarm ? THREE.MathUtils.randFloat(0.07, 0.14) : THREE.MathUtils.randFloat(0.54, 0.66),
+          THREE.MathUtils.randFloat(0.12, 0.34),
+          THREE.MathUtils.randFloat(0.72, 1.0)
+        ).multiplyScalar(brightness);
+        colors[index * 3] = color.r;
+        colors[index * 3 + 1] = color.g;
+        colors[index * 3 + 2] = color.b;
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+      const material = new THREE.PointsMaterial({
+        size,
+        vertexColors: true,
+        transparent: true,
+        opacity,
+        sizeAttenuation: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
+      });
+      const stars = new THREE.Points(geometry, material);
+      stars.frustumCulled = false;
+      return stars;
+    }
+
+    const starField = new THREE.Group();
+    starField.add(createStarField(7000, 90, 0.035, 0.68, 1.0));
+    starField.add(createStarField(900, 88, 0.075, 0.82, 1.8));
+    starField.add(createStarField(80, 86, 0.14, 0.6, 3.5));
+    scene.add(starField);
+    const starMaterials = starField.children.map((stars) => ({
+      material: stars.material,
+      opacity: stars.material.opacity,
+      size: stars.material.size,
+    }));
+
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const hdriLoader = new THREE.TextureLoader();
+    hdriLoader.load(
+      './sovohdri.png',
+      (hdriTexture) => {
+        hdriTexture.colorSpace = THREE.SRGBColorSpace;
+        hdriTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        hdriTexture.minFilter = THREE.LinearMipmapLinearFilter;
+        hdriTexture.magFilter = THREE.LinearFilter;
+        hdriTexture.mapping = THREE.EquirectangularReflectionMapping;
+        const environmentMap = pmremGenerator.fromEquirectangular(hdriTexture).texture;
+        scene.environment = environmentMap;
+        scene.environmentIntensity = environmentBaseIntensity;
+        hdriTexture.dispose();
+        pmremGenerator.dispose();
+        modelEntries.forEach((entry) => {
+          if (!entry.root) return;
+          entry.root.traverse((child) => {
+            if (!child.isMesh) return;
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((material) => {
+              if (material && 'envMapIntensity' in material) material.envMapIntensity = 1.35;
+            });
+          });
+        });
+      },
+      undefined,
+      (error) => console.error('Unable to load sovohdri.png for reflections.', error)
+    );
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(-5.44, 3.46, 0.09);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.minDistance = 0.3;
+    controls.maxDistance = 60;
+    controls.update();
+
+    // GUI is created up front so any model, once it finishes loading asynchronously,
+    // can add its own folder to it regardless of load order/timing.
+    const gui = new GUI({ title: 'Debug Controls' });
+    gui.domElement.style.maxHeight = '96vh';
+    gui.domElement.style.overflowY = 'auto';
+    gui.domElement.style.display = 'none';
+
+    /* --------------------------------------------------------------------- */
+    /*  ENVIRONMENT / GROUND / HELPERS                                        */
+    /* --------------------------------------------------------------------- */
+
+    const groundGeo = new THREE.CircleGeometry(20, 64);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x111520, roughness: 1, metalness: 0 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    ground.visible = false;
+    scene.add(ground);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0);
+    scene.add(ambientLight);
+
+    const hemiLight = new THREE.HemisphereLight(0x88aaff, 0x11141c, 1.31);
+    scene.add(hemiLight);
+
+    const keyLight = new THREE.DirectionalLight(0x7a7a7a, 2.4);
+    keyLight.position.set(-4.2, 8.3, -4.2);
+    keyLight.target.position.set(20, 1, -20);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(4096, 4096);
+    keyLight.shadow.camera.near = 0.1;
+    keyLight.shadow.camera.far = 30;
+    keyLight.shadow.camera.left = -8;
+    keyLight.shadow.camera.right = 8;
+    keyLight.shadow.camera.top = 8;
+    keyLight.shadow.camera.bottom = -8;
+    keyLight.shadow.bias = -0.00005;
+    keyLight.shadow.normalBias = 0.015;
+    scene.add(keyLight, keyLight.target);
+
+    /* --------------------------------------------------------------------- */
+    /*  ADJUSTABLE SPOTLIGHT                                                  */
+    /* --------------------------------------------------------------------- */
+
+    const spotLight = new THREE.SpotLight(0xff8fcb, 226.9, 10, THREE.MathUtils.degToRad(14), 0.3, 2.15);
+    spotLight.position.set(1, 12.1, 6.9);
+    spotLight.castShadow = true;
+    spotLight.shadow.mapSize.set(4096, 4096);
+    spotLight.shadow.camera.near = 0.1;
+    spotLight.shadow.camera.far = 18;
+    spotLight.shadow.bias = -0.00005;
+    spotLight.shadow.normalBias = 0.012;
+    scene.add(spotLight);
+    scene.add(spotLight.target);
+    spotLight.target.position.set(-2.3, 1, -0.7);
+    keyLight.target.position.z = 20;
+    spotLight.position.z = -20;
+
+    const lightSweepSettings = {
+      enabled: true,
+      speed: 0.4,
+      phase: 0,
+      range: 20,
+      pauseDuration: 0.01,
+      pauseRemaining: 0,
+      maxPasses: 2,
+      passCount: 0,
+    };
+    const lightSweepBaseIntensity = {
+      key: keyLight.intensity,
+      spot: spotLight.intensity,
+    };
+    const environmentBaseIntensity = 1;
+    const hemiBaseIntensity = hemiLight.intensity;
+    const frameOnePreloader = {
+      active: false,
+      ready: false,
+      elapsed: 0,
+      duration: 10,
+    };
+    const startupLoader = document.getElementById('startupLoader');
+    const startupSequence = {
+      active: true,
+      ready: false,
+      elapsed: 0,
+      duration: 3,
+    };
+    keyLight.intensity = lightSweepBaseIntensity.key;
+    spotLight.intensity = lightSweepBaseIntensity.spot;
+    hemiLight.intensity = hemiBaseIntensity;
+
+    function beginFrameOnePreloader() {
+      const entry = findAstronautEntry();
+      frameOnePreloader.ready = true;
+      frameOnePreloader.active = true;
+      frameOnePreloader.elapsed = 0;
+      keyLight.intensity = lightSweepBaseIntensity.key;
+      spotLight.intensity = lightSweepBaseIntensity.spot;
+      hemiLight.intensity = hemiBaseIntensity;
+      scene.environmentIntensity = environmentBaseIntensity;
+      controls.enabled = false;
+      if (entry && entry.mixer && entry.actions.floating) {
+        const action = entry.actions.floating;
+        if (entry.activeAction && entry.activeAction !== action) entry.activeAction.stop();
+        entry.animSettings.clip = 'floating';
+        entry.animSettings.playing = true;
+        entry.animSettings.loop = true;
+        entry.activeAction = action;
+        entry.activeActionName = 'floating';
+        action.reset();
+        action.setLoop(THREE.LoopRepeat, Infinity);
+        action.clampWhenFinished = false;
+        action.setEffectiveTimeScale(Math.abs(entry.animSettings.timeScale) || 1);
+        action.play();
+      }
+    }
+
+    function updateStartupSequence(dt) {
+      if (!startupSequence.active) return;
+      startupSequence.elapsed = Math.min(startupSequence.elapsed + dt, startupSequence.duration);
+      if (startupSequence.elapsed >= startupSequence.duration && startupSequence.ready) {
+        startupSequence.active = false;
+        startupLoader.classList.add('is-hidden');
+        beginFrameOnePreloader();
+      }
+    }
+
+    function updateLightSweep(dt) {
+      if (frameOnePreloader.active) {
+        frameOnePreloader.elapsed = Math.min(frameOnePreloader.elapsed + dt, frameOnePreloader.duration);
+        const linearProgress = frameOnePreloader.elapsed / frameOnePreloader.duration;
+        const progress = linearProgress * linearProgress * (3 - 2 * linearProgress);
+        lightSweepSettings.phase = linearProgress;
+        keyLight.target.position.z = lightSweepSettings.range - progress * lightSweepSettings.range * 2;
+        spotLight.position.z = -lightSweepSettings.range + progress * lightSweepSettings.range * 2;
+        keyLight.intensity = lightSweepBaseIntensity.key;
+        spotLight.intensity = lightSweepBaseIntensity.spot;
+        hemiLight.intensity = hemiBaseIntensity;
+        scene.environmentIntensity = environmentBaseIntensity;
+        if (linearProgress >= 1) {
+          frameOnePreloader.active = false;
+          lightSweepSettings.phase = 0;
+          keyLight.target.position.z = lightSweepSettings.range;
+          spotLight.position.z = -lightSweepSettings.range;
+          keyLight.intensity = lightSweepBaseIntensity.key;
+          spotLight.intensity = lightSweepBaseIntensity.spot;
+          hemiLight.intensity = hemiBaseIntensity;
+          scene.environmentIntensity = environmentBaseIntensity;
+          if (frameOnePreloader.ready) playAstronautSequence();
+        }
+        return;
+      }
+      if (!frameOnePreloader.ready) return;
+      if (!lightSweepSettings.enabled || cinematicSequence.phase !== 'idle') return;
+      if (lightSweepSettings.pauseRemaining > 0) {
+        const pauseDuration = Math.max(0.01, lightSweepSettings.pauseDuration);
+        lightSweepSettings.pauseRemaining = Math.max(0, lightSweepSettings.pauseRemaining - dt);
+        const pauseProgress = 1 - lightSweepSettings.pauseRemaining / pauseDuration;
+        const fadeProgress = pauseProgress < 0.5
+          ? 1 - (pauseProgress * 2) * (pauseProgress * 2) * (3 - 2 * pauseProgress * 2)
+          : ((pauseProgress - 0.5) * 2) * ((pauseProgress - 0.5) * 2) * (3 - 2 * ((pauseProgress - 0.5) * 2));
+        keyLight.intensity = lightSweepBaseIntensity.key * fadeProgress;
+        spotLight.intensity = lightSweepBaseIntensity.spot * fadeProgress;
+        if (pauseProgress >= 0.5) {
+          keyLight.target.position.z = lightSweepSettings.range;
+          spotLight.position.z = -lightSweepSettings.range;
+        }
+        if (lightSweepSettings.pauseRemaining === 0) {
+          lightSweepSettings.phase = 0;
+          keyLight.intensity = lightSweepBaseIntensity.key;
+          spotLight.intensity = lightSweepBaseIntensity.spot;
+        }
+        return;
+      }
+      lightSweepSettings.phase = Math.min(1, lightSweepSettings.phase + dt * lightSweepSettings.speed);
+      const progress = lightSweepSettings.phase;
+      keyLight.target.position.z = lightSweepSettings.range - progress * lightSweepSettings.range * 2;
+      spotLight.position.z = -lightSweepSettings.range + progress * lightSweepSettings.range * 2;
+      keyLight.intensity = lightSweepBaseIntensity.key;
+      spotLight.intensity = lightSweepBaseIntensity.spot;
+      if (lightSweepSettings.phase === 1) {
+        lightSweepSettings.passCount += 1;
+        if (lightSweepSettings.passCount >= lightSweepSettings.maxPasses) {
+          // Done — leave lights where they ended, disable sweep
+          lightSweepSettings.enabled = false;
+        } else {
+          lightSweepSettings.pauseRemaining = Math.max(0.01, lightSweepSettings.pauseDuration);
+        }
+      }
+    }
+
+    const spotHelper = new THREE.SpotLightHelper(spotLight);
+    spotHelper.visible = false;
+    const keyHelper = new THREE.DirectionalLightHelper(keyLight, 0.7, 0x9bd4ff);
+    keyHelper.visible = false;
+
+    /* --------------------------------------------------------------------- */
+    /*  MULTI-MODEL LOADING + PER-MODEL CONTROLS                              */
+    /*  Every model gets: position/rotation/scale sliders, wireframe/visible/ */
+    /*  shadow toggles, its own animation clip player, and "Drag in viewport"*/
+    /*  buttons that attach a TransformControls gizmo so you can move,       */
+    /*  rotate, or resize it directly with the mouse.                        */
+    /* --------------------------------------------------------------------- */
+
+    const loadingFill = document.getElementById('loadingFill');
+    const loadingText = document.getElementById('loadingText');
+    const loadingScreen = document.getElementById('loading');
+
+    let pendingLoads = 0;
+    function beginLoad() { pendingLoads++; }
+    function endLoad() {
+      pendingLoads = Math.max(0, pendingLoads - 1);
+      if (pendingLoads === 0 && loadingScreen) {
+        loadingScreen.style.opacity = '0';
+        setTimeout(() => (loadingScreen.style.display = 'none'), 400);
+      }
+    }
+
+    const loader = new GLTFLoader();
+    const modelsFolder = gui.addFolder('Models');
+    const modelEntries = [];
+
+    function applyEntryTransform(entry) {
+      if (!entry.root) return;
+      entry.root.position.set(entry.settings.posX, entry.settings.posY, entry.settings.posZ);
+      entry.root.rotation.set(
+        THREE.MathUtils.degToRad(entry.settings.rotX),
+        THREE.MathUtils.degToRad(entry.settings.rotY),
+        THREE.MathUtils.degToRad(entry.settings.rotZ)
+      );
+      entry.root.scale.setScalar(entry.settings.scale);
+    }
+
+    function setActiveClip(entry, name) {
+      if (entry.mixer && entry.activeAction) {
+        entry.activeAction.fadeOut(entry.animSettings.crossfade);
+      }
+      if (name === 'None' || !entry.actions[name]) {
+        entry.activeAction = null;
+        entry.activeActionName = 'None';
+        return;
+      }
+      const next = entry.actions[name];
+      next.reset();
+      next.setLoop(entry.animSettings.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+      next.clampWhenFinished = !entry.animSettings.loop;
+      next.setEffectiveTimeScale(entry.animSettings.timeScale);
+      next.fadeIn(entry.animSettings.crossfade).play();
+      if (!entry.animSettings.playing) next.paused = true;
+      entry.activeAction = next;
+      entry.activeActionName = name;
+    }
+
+    const animationCamera = {
+      active: false,
+      duration: 1.8,
+      elapsed: 0,
+      startFov: 22,
+      endFov: 67,
+      startPosition: new THREE.Vector3(),
+      startTarget: new THREE.Vector3(),
+      endPosition: new THREE.Vector3(1.68, 0.29, 0.33),
+      endTarget: new THREE.Vector3(-4.05, 6.00, -0.15),
+    };
+
+    const cinematicSequence = {
+      phase: 'idle',
+      fovBlastDuration: 1.5,
+      fovBlastElapsed: 0,
+      fovBlastStartFov: 67,
+      reverseDuration: 1,
+      reverseElapsed: 0,
+      reverseStartFov: 67,
+      reverseEndFov: 170,
+      reverseStartPosition: new THREE.Vector3(),
+      reverseEndPosition: new THREE.Vector3(),
+      reverseExposure: 0,
+    };
+    const cinematicBlack = document.getElementById('cinematicBlack');
+    animationCamera.startFov = camera.fov;
+    animationCamera.startPosition.copy(camera.position);
+    animationCamera.startTarget.copy(controls.target);
+
+    function findAstronautEntry() {
+      return modelEntries.find((entry) => entry.label === 'Astronaut');
+    }
+
+    function playAstronautSequence() {
+      const entry = findAstronautEntry();
+      if (!entry || !entry.mixer || !entry.actions.floating) return;
+
+      cinematicSequence.phase = 'camera-in';
+      cinematicBlack.style.opacity = '0';
+      starMaterials.forEach(({ material, opacity, size }) => {
+        material.opacity = opacity;
+        material.size = size;
+      });
+      cinematicSequence.reverseElapsed = 0;
+      animationCamera.active = false;
+      animationCamera.elapsed = 0;
+      animationCamera.startFov = camera.fov;
+      animationCamera.startPosition.copy(camera.position);
+      animationCamera.startTarget.copy(controls.target);
+      controls.enabled = false;
+
+      entry.animSettings.clip = 'floating';
+      entry.animSettings.playing = true;
+      entry.animSettings.loop = false;
+      const action = entry.actions.floating;
+      if (entry.activeAction && entry.activeAction !== action) entry.activeAction.stop();
+      entry.activeAction = action;
+      entry.activeActionName = 'floating';
+      // If the animation is already playing (from the preloader), just switch
+      // the loop mode in-place so it continues without any visible reset/glitch.
+      action.setLoop(THREE.LoopOnce, 1);
+      action.clampWhenFinished = true;
+      action.setEffectiveTimeScale(Math.abs(entry.animSettings.timeScale) || 1);
+      if (!action.isRunning()) {
+        action.reset();
+        action.play();
+      }
+    }
+
+    function resetAstronautSequence() {
+      const entry = findAstronautEntry();
+      cinematicSequence.phase = 'idle';
+      cinematicBlack.style.opacity = '0';
+      starMaterials.forEach(({ material, opacity, size }) => {
+        material.opacity = opacity;
+        material.size = size;
+      });
+      animationCamera.active = false;
+      controls.enabled = true;
+      camera.position.copy(animationCamera.startPosition);
+      controls.target.copy(animationCamera.startTarget);
+      camera.fov = animationCamera.startFov;
+      camera.updateProjectionMatrix();
+      if (entry && entry.activeAction) {
+        entry.activeAction.stop();
+        entry.activeAction.reset();
+        entry.activeActionName = 'None';
+      }
+    }
+
+    function startAnimationCamera() {
+      animationCamera.active = true;
+      animationCamera.elapsed = 0;
+      animationCamera.startFov = camera.fov;
+      animationCamera.startPosition.copy(camera.position);
+      animationCamera.startTarget.copy(controls.target);
+      controls.enabled = false;
+    }
+
+    function updateAnimationCamera(dt) {
+      if (!animationCamera.active) return;
+      animationCamera.elapsed = Math.min(animationCamera.elapsed + dt, animationCamera.duration);
+      const linearProgress = animationCamera.elapsed / animationCamera.duration;
+      const progress = linearProgress * linearProgress * (3 - 2 * linearProgress);
+      camera.position.lerpVectors(animationCamera.startPosition, animationCamera.endPosition, progress);
+      controls.target.lerpVectors(animationCamera.startTarget, animationCamera.endTarget, progress);
+      camera.fov = THREE.MathUtils.lerp(animationCamera.startFov, animationCamera.endFov, progress);
+      camera.updateProjectionMatrix();
+      if (linearProgress >= 1) {
+        animationCamera.active = false;
+        cinematicSequence.phase = 'fov-blast';
+        cinematicSequence.fovBlastElapsed = 0;
+        cinematicSequence.fovBlastStartFov = camera.fov;
+        // Pre-compute reverse positions so they are ready when fov-blast finishes
+        cinematicSequence.reverseElapsed = 0;
+        cinematicSequence.reverseStartFov = cinematicSequence.reverseEndFov;
+        cinematicSequence.reverseStartPosition.copy(camera.position);
+        const facingDirection = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
+        cinematicSequence.reverseEndPosition.copy(camera.position).addScaledVector(facingDirection, 50.0);
+      }
+    }
+
+    function updateCinematicSequence(dt) {
+      if (cinematicSequence.phase === 'camera-in') {
+        animationCamera.active = true;
+        updateAnimationCamera(dt);
+        return;
+      }
+      if (cinematicSequence.phase === 'fov-blast') {
+        cinematicSequence.fovBlastElapsed = Math.min(
+          cinematicSequence.fovBlastElapsed + dt,
+          cinematicSequence.fovBlastDuration
+        );
+        const t = cinematicSequence.fovBlastElapsed / cinematicSequence.fovBlastDuration;
+        // smoothstep — gradual, even widening
+        const progress = t * t * (3 - 2 * t);
+        camera.fov = THREE.MathUtils.lerp(
+          cinematicSequence.fovBlastStartFov,
+          cinematicSequence.reverseEndFov,
+          progress
+        );
+        camera.updateProjectionMatrix();
+        if (t >= 1) {
+          camera.fov = cinematicSequence.reverseEndFov;
+          camera.updateProjectionMatrix();
+          cinematicSequence.phase = 'reverse';
+          cinematicSequence.reverseElapsed = 0;
+        }
+        return;
+      }
+      if (cinematicSequence.phase === 'reverse') {
+        cinematicSequence.reverseElapsed = Math.min(
+          cinematicSequence.reverseElapsed + dt,
+          cinematicSequence.reverseDuration
+        );
+        const linearProgress = cinematicSequence.reverseElapsed / cinematicSequence.reverseDuration;
+        // easeInQuart — starts slow then blasts away fast
+        const progress = linearProgress * linearProgress * linearProgress * linearProgress;
+        const exposureProgress = Math.min(1, progress * 1.18);
+        camera.position.lerpVectors(
+          cinematicSequence.reverseStartPosition,
+          cinematicSequence.reverseEndPosition,
+          progress
+        );
+        controls.target.copy(animationCamera.endTarget);
+        camera.fov = THREE.MathUtils.lerp(
+          cinematicSequence.reverseStartFov,
+          cinematicSequence.reverseEndFov,
+          progress
+        );
+        starMaterials.forEach(({ material, opacity, size }) => {
+          material.opacity = THREE.MathUtils.lerp(opacity, Math.min(1, opacity * 1.9), exposureProgress);
+          material.size = THREE.MathUtils.lerp(size, size * 1.8, exposureProgress);
+        });
+        cinematicBlack.style.opacity = String(exposureProgress * exposureProgress);
+        camera.updateProjectionMatrix();
+        if (linearProgress >= 1) {
+          cinematicSequence.phase = 'idle';
+          controls.enabled = true;
+        }
+        return;
+      }
+    }
+
+    function buildModelFolder(entry) {
+      const f = modelsFolder.addFolder(entry.label);
+
+      f.add(entry.settings, 'posX', -10, 10, 0.01).name('Position X').listen().onChange(() => applyEntryTransform(entry));
+      f.add(entry.settings, 'posY', -10, 10, 0.01).name('Position Y').listen().onChange(() => applyEntryTransform(entry));
+      f.add(entry.settings, 'posZ', -10, 10, 0.01).name('Position Z').listen().onChange(() => applyEntryTransform(entry));
+      f.add(entry.settings, 'rotX', 0, 360, 1).name('Rotation X°').listen().onChange(() => applyEntryTransform(entry));
+      f.add(entry.settings, 'rotY', 0, 360, 1).name('Rotation Y°').listen().onChange(() => applyEntryTransform(entry));
+      f.add(entry.settings, 'rotZ', 0, 360, 1).name('Rotation Z°').listen().onChange(() => applyEntryTransform(entry));
+      f.add(entry.settings, 'scale', 0.01, 5, 0.01).name('Scale').listen().onChange(() => applyEntryTransform(entry));
+      f.add(entry.settings, 'visible').name('Visible').onChange((v) => { if (entry.root) entry.root.visible = v; });
+      f.add(entry.settings, 'wireframe').name('Wireframe').onChange((v) => {
+        if (!entry.root) return;
+        entry.root.traverse((c) => { if (c.isMesh) c.material.wireframe = v; });
+      });
+      f.add(entry.settings, 'castShadow').name('Cast Shadow').onChange((v) => {
+        if (!entry.root) return;
+        entry.root.traverse((c) => { if (c.isMesh) c.castShadow = v; });
+      });
+
+      const transformActions = {
+        move() { if (entry.root) { transformControls.setMode('translate'); transformControls.attach(entry.root); } },
+        rotate() { if (entry.root) { transformControls.setMode('rotate'); transformControls.attach(entry.root); } },
+        resize() { if (entry.root) { transformControls.setMode('scale'); transformControls.attach(entry.root); } },
+        deselect() { transformControls.detach(); },
+      };
+      const tf = f.addFolder('Drag in viewport');
+      tf.add(transformActions, 'move').name('Move (drag)');
+      tf.add(transformActions, 'rotate').name('Rotate (drag)');
+      tf.add(transformActions, 'resize').name('Resize (drag)');
+      tf.add(transformActions, 'deselect').name('Deselect');
+
+      const af = f.addFolder('Animation');
+      entry.clipController = af.add(entry.animSettings, 'clip', entry.clipNames).name('Clip').onChange((v) => setActiveClip(entry, v));
+      const animationActions = {
+        playFrameSequence: playAstronautSequence,
+        resetFrameSequence: resetAstronautSequence,
+      };
+      af.add(animationActions, 'playFrameSequence').name('Play frame 1 → 2');
+      af.add(animationActions, 'resetFrameSequence').name('Reset sequence');
+      af.add(entry.animSettings, 'timeScale', -2, 2, 0.01).name('Speed').onChange((v) => { if (entry.activeAction) entry.activeAction.setEffectiveTimeScale(v); });
+      af.add(entry.animSettings, 'loop').name('Loop').onChange((v) => {
+        if (entry.activeAction) {
+          entry.activeAction.setLoop(v ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+          entry.activeAction.clampWhenFinished = !v;
+        }
+      });
+      af.add(entry.animSettings, 'crossfade', 0, 2, 0.05).name('Crossfade (s)');
+
+      f.open();
+    }
+
+    function loadModel(path, label, initialPos = [0, 0, 0]) {
+      beginLoad();
+      const entry = {
+        label, path,
+        root: null,
+        mixer: null,
+        actions: {},
+        activeAction: null,
+        activeActionName: 'None',
+        clipNames: ['None'],
+        clipController: null,
+        settings: {
+          posX: initialPos[0], posY: initialPos[1], posZ: initialPos[2],
+          rotX: 0, rotY: 91, rotZ: 6,
+          scale: 1,
+          wireframe: false,
+          visible: true,
+          castShadow: true,
+        },
+        animSettings: {
+          clip: 'floating',
+          playing: true,
+          timeScale: -1.88,
+          loop: true,
+          crossfade: 0,
+        },
+      };
+      modelEntries.push(entry);
+      buildModelFolder(entry);
+
+      loader.load(
+        path,
+        (gltf) => {
+          entry.root = gltf.scene;
+          entry.root.traverse((child) => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              if (child.material) {
+                const mats = Array.isArray(child.material) ? child.material : [child.material];
+                mats.forEach((mat) => {
+                  if (mat.map) mat.map.colorSpace = THREE.SRGBColorSpace;
+                  if (mat.emissiveMap) mat.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+                  mat.needsUpdate = true;
+                });
+              }
+            }
+          });
+          scene.add(entry.root);
+          applyEntryTransform(entry);
+
+          if (gltf.animations && gltf.animations.length > 0) {
+            entry.mixer = new THREE.AnimationMixer(entry.root);
+            gltf.animations.forEach((clip) => {
+              entry.actions[clip.name] = entry.mixer.clipAction(clip);
+              entry.clipNames.push(clip.name);
+            });
+            entry.clipController.options(entry.clipNames);
+            const defaultClip = entry.clipNames.includes(entry.animSettings.clip)
+              ? entry.animSettings.clip
+              : (entry.clipNames[1] || 'None');
+            entry.animSettings.clip = defaultClip;
+            setActiveClip(entry, defaultClip);
+          } else {
+            entry.clipController.options(entry.clipNames);
+          }
+
+          endLoad();
+          startupSequence.ready = true;
+          if (!startupSequence.active) beginFrameOnePreloader();
+        },
+        (xhr) => {
+          if (xhr.total) {
+            const pct = Math.min(100, Math.round((xhr.loaded / xhr.total) * 100));
+            if (loadingFill) loadingFill.style.width = pct + '%';
+            if (loadingText) loadingText.textContent = label + ': ' + pct + '%';
+          }
+        },
+        (err) => {
+          if (loadingText) loadingText.textContent = 'Failed to load ' + path + ' — check the path and that you are running a local server (not file://)';
+          console.error(err);
+          endLoad();
+        }
+      );
+
+      return entry;
+    }
+
+    // TransformControls: click a model's "Drag in viewport" buttons to attach it here,
+    // then drag the on-screen gizmo to move / rotate / resize that model.
+    const transformControls = new TransformControls(camera, renderer.domElement);
+    transformControls.addEventListener('dragging-changed', (e) => { controls.enabled = !e.value; });
+    transformControls.addEventListener('objectChange', () => {
+      const obj = transformControls.object;
+      const entry = modelEntries.find((m) => m.root === obj);
+      if (!entry) return;
+      if (transformControls.getMode() === 'scale') {
+        const avg = (obj.scale.x + obj.scale.y + obj.scale.z) / 3;
+        obj.scale.setScalar(avg);
+        entry.settings.scale = avg;
+      }
+      entry.settings.posX = obj.position.x;
+      entry.settings.posY = obj.position.y;
+      entry.settings.posZ = obj.position.z;
+      entry.settings.rotX = THREE.MathUtils.radToDeg(obj.rotation.x);
+      entry.settings.rotY = THREE.MathUtils.radToDeg(obj.rotation.y);
+      entry.settings.rotZ = THREE.MathUtils.radToDeg(obj.rotation.z);
+    });
+
+    const lightTransformControls = new TransformControls(camera, renderer.domElement);
+    lightTransformControls.setMode('translate');
+    lightTransformControls.setSize(0.8);
+    lightTransformControls.addEventListener('dragging-changed', (e) => { controls.enabled = !e.value; });
+
+    function attachLightForDragging(light) {
+      lightTransformControls.setMode('translate');
+      lightTransformControls.attach(light);
+    }
+
+    function detachLightDragging() {
+      lightTransformControls.detach();
+    }
+
+    lightTransformControls.addEventListener('objectChange', () => {
+      const light = lightTransformControls.object;
+      if (light === spotLight) {
+        spotSettings.posX = light.position.x;
+        spotSettings.posY = light.position.y;
+        spotSettings.posZ = light.position.z;
+      }
+      if (light === keyLight) {
+        keySettings.posX = light.position.x;
+        keySettings.posY = light.position.y;
+        keySettings.posZ = light.position.z;
+      }
+    });
+
+    // Load the astronaut model.
+    loadModel('astronauta.glb', 'Astronaut', [-0.9, 0, 0]);
+
+    /* --------------------------------------------------------------------- */
+    /*  POST PROCESSING — BLOOM + COLOR GRADING                               */
+    /* --------------------------------------------------------------------- */
+
+    const composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    const bloomSettings = {
+      enabled: true,
+      strength: 0.03,
+      radius: 1,
+      threshold: 1,
+    };
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      bloomSettings.strength,
+      bloomSettings.radius,
+      bloomSettings.threshold
+    );
+    composer.addPass(bloomPass);
+
+    const ColorGradeShader = {
+      uniforms: {
+        tDiffuse: { value: null },
+        brightness: { value: 0.0 },
+        contrast: { value: 1.0 },
+        saturation: { value: 0.99 },
+        hue: { value: 0.15 },
+        exposure: { value: 2.0 },
+        vignette: { value: 0.46 },
+      },
+      vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+      fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float brightness;
+    uniform float contrast;
+    uniform float saturation;
+    uniform float hue;
+    uniform float exposure;
+    uniform float vignette;
+    varying vec2 vUv;
+
+    vec3 adjustHue(vec3 color, float hueAdjust) {
+      const vec3 k = vec3(0.57735, 0.57735, 0.57735);
+      float cosAngle = cos(hueAdjust);
+      return color * cosAngle + cross(k, color) * sin(hueAdjust) + k * dot(k, color) * (1.0 - cosAngle);
+    }
+
+    void main() {
+      vec4 texel = texture2D(tDiffuse, vUv);
+      vec3 color = texel.rgb;
+
+      color *= pow(2.0, exposure);
+      color += brightness;
+      color = (color - 0.5) * contrast + 0.5;
+
+      float gray = dot(color, vec3(0.299, 0.587, 0.114));
+      color = mix(vec3(gray), color, saturation);
+
+      color = adjustHue(color, hue);
+
+      vec2 uvCentered = vUv - 0.5;
+      float vig = 1.0 - vignette * smoothstep(0.15, 0.85, length(uvCentered) * 1.4);
+      color *= clamp(vig, 0.0, 1.0);
+
+      gl_FragColor = vec4(clamp(color, 0.0, 1.0), texel.a);
+    }
+  `
+    };
+
+    const colorGradePass = new ShaderPass(ColorGradeShader);
+    composer.addPass(colorGradePass);
+
+    const outputPass = new OutputPass();
+    composer.addPass(outputPass);
+
+    const colorGradeSettings = {
+      brightness: 0.0,
+      contrast: 1.0,
+      saturation: 0.99,
+      hue: 0.15,
+      exposure: 2.0,
+      vignette: 0.46,
+    };
+
+    /* --------------------------------------------------------------------- */
+    /*  SCENE SETTINGS (bg, ambient, hemi, tone mapping, ground/grid)          */
+    /* --------------------------------------------------------------------- */
+
+    const sceneSettings = {
+      background: '#000000',
+      ambientIntensity: 0,
+      hemiIntensity: 1.31,
+      toneMappingExposure: 3.0,
+      showGround: false,
+    };
+
+    /* --------------------------------------------------------------------- */
+    /*  CAMERA SETTINGS                                                       */
+    /* --------------------------------------------------------------------- */
+
+    const camSettings = {
+      fov: 22,
+      posX: camera.position.x,
+      posY: camera.position.y,
+      posZ: camera.position.z,
+      targetX: controls.target.x,
+      targetY: controls.target.y,
+      targetZ: controls.target.z,
+      flySpeed: 2.5,
+    };
+
+    /* --------------------------------------------------------------------- */
+    /*  GUI — Scene / Lighting / Post Processing / Camera                     */
+    /* --------------------------------------------------------------------- */
+
+    // ---- Scene ----
+    const sceneFolder = gui.addFolder('Scene');
+    sceneFolder.addColor(sceneSettings, 'background').name('Background').onChange((v) => {
+      scene.background.set(v);
+    });
+    sceneFolder.add(sceneSettings, 'ambientIntensity', 0, 3, 0.01).name('Ambient Intensity').onChange((v) => {
+      ambientLight.intensity = v;
+    });
+    sceneFolder.add(sceneSettings, 'hemiIntensity', 0, 3, 0.01).name('Hemisphere Intensity').onChange((v) => {
+      hemiLight.intensity = v;
+    });
+    sceneFolder.add(sceneSettings, 'toneMappingExposure', 0, 3, 0.01).name('Tone Map Exposure').onChange((v) => {
+      renderer.toneMappingExposure = v;
+    });
+    sceneFolder.add(sceneSettings, 'showGround').name('Show Ground').onChange((v) => (ground.visible = v));
+
+    // ---- Lighting > Spotlight ----
+    const lightFolder = gui.addFolder('Lighting');
+    const sweepFolder = lightFolder.addFolder('Light Sweep Loop');
+    sweepFolder.add(lightSweepSettings, 'enabled').name('Enabled').onChange((enabled) => {
+      lightSweepSettings.pauseRemaining = 0;
+      if (!enabled) {
+        keyLight.intensity = lightSweepBaseIntensity.key;
+        spotLight.intensity = lightSweepBaseIntensity.spot;
+      }
+    });
+    sweepFolder.add(lightSweepSettings, 'speed', 0.1, 4, 0.01).name('Speed');
+    sweepFolder.add(lightSweepSettings, 'pauseDuration', 0, 2, 0.05).name('Lights-off pause');
+    sweepFolder.add(lightSweepSettings, 'range', 1, 40, 0.1).name('Range').onChange((v) => {
+      keyLight.target.position.z = v;
+      spotLight.position.z = -v;
+    });
+    const keyFolder = lightFolder.addFolder('Key Light');
+    const keySettings = {
+      color: '#7a7a7a',
+      intensity: keyLight.intensity,
+      posX: keyLight.position.x,
+      posY: keyLight.position.y,
+      posZ: keyLight.position.z,
+      targetX: keyLight.target.position.x,
+      targetY: keyLight.target.position.y,
+      targetZ: keyLight.target.position.z,
+      castShadow: keyLight.castShadow,
+      showHelper: true,
+    };
+    keyFolder.addColor(keySettings, 'color').name('Color').onChange((v) => keyLight.color.set(v));
+    keyFolder.add(keySettings, 'intensity', 0, 100, 0.1).name('Intensity').onChange((v) => {
+      lightSweepBaseIntensity.key = v;
+      if (lightSweepSettings.pauseRemaining === 0) keyLight.intensity = v;
+    });
+    keyFolder.add(keySettings, 'posX', -30, 30, 0.1).name('Pos X').onChange((v) => (keyLight.position.x = v));
+    keyFolder.add(keySettings, 'posY', -10, 30, 0.1).name('Pos Y').onChange((v) => (keyLight.position.y = v));
+    keyFolder.add(keySettings, 'posZ', -30, 30, 0.1).name('Pos Z').onChange((v) => (keyLight.position.z = v));
+    keyFolder.add(keySettings, 'targetX', -20, 20, 0.1).name('Target X').onChange((v) => (keyLight.target.position.x = v));
+    keyFolder.add(keySettings, 'targetY', -20, 20, 0.1).name('Target Y').onChange((v) => (keyLight.target.position.y = v));
+    keyFolder.add(keySettings, 'targetZ', -40, 40, 0.1).name('Target Z').listen().onChange((v) => (keyLight.target.position.z = v));
+    keyFolder.add(keySettings, 'castShadow').name('Cast Shadow').onChange((v) => (keyLight.castShadow = v));
+    keyFolder.add(keySettings, 'showHelper').name('Show Helper').onChange((v) => (keyHelper.visible = v));
+    keyFolder.add({ drag: () => attachLightForDragging(keyLight) }, 'drag').name('Drag in viewport');
+    keyFolder.add({ stop: detachLightDragging }, 'stop').name('Stop dragging');
+    const spotFolder = lightFolder.addFolder('Spot Light');
+    const spotSettings = {
+      color: '#ff8fcb',
+      intensity: spotLight.intensity,
+      distance: spotLight.distance,
+      angleDeg: THREE.MathUtils.radToDeg(spotLight.angle),
+      penumbra: spotLight.penumbra,
+      decay: spotLight.decay,
+      posX: spotLight.position.x,
+      posY: spotLight.position.y,
+      posZ: spotLight.position.z,
+      targetX: spotLight.target.position.x,
+      targetY: spotLight.target.position.y,
+      targetZ: spotLight.target.position.z,
+      castShadow: true,
+      showHelper: true,
+    };
+    spotFolder.addColor(spotSettings, 'color').name('Color').onChange((v) => spotLight.color.set(v));
+    spotFolder.add(spotSettings, 'intensity', 0, 1000, 0.1).name('Intensity').onChange((v) => {
+      lightSweepBaseIntensity.spot = v;
+      if (lightSweepSettings.pauseRemaining === 0) spotLight.intensity = v;
+    });
+    spotFolder.add(spotSettings, 'distance', 0, 50, 0.5).name('Distance').onChange((v) => (spotLight.distance = v));
+    spotFolder.add(spotSettings, 'angleDeg', 1, 90, 1).name('Angle°').onChange((v) => (spotLight.angle = THREE.MathUtils.degToRad(v)));
+    spotFolder.add(spotSettings, 'penumbra', 0, 1, 0.01).name('Penumbra').onChange((v) => (spotLight.penumbra = v));
+    spotFolder.add(spotSettings, 'decay', 0, 4, 0.05).name('Decay').onChange((v) => (spotLight.decay = v));
+    spotFolder.add(spotSettings, 'posX', -20, 20, 0.1).name('Pos X').onChange((v) => (spotLight.position.x = v));
+    spotFolder.add(spotSettings, 'posY', 0, 20, 0.1).name('Pos Y').onChange((v) => (spotLight.position.y = v));
+    spotFolder.add(spotSettings, 'posZ', -40, 40, 0.1).name('Pos Z').listen().onChange((v) => (spotLight.position.z = v));
+    spotFolder.add(spotSettings, 'targetX', -20, 20, 0.1).name('Target X').onChange((v) => (spotLight.target.position.x = v));
+    spotFolder.add(spotSettings, 'targetY', -20, 20, 0.1).name('Target Y').onChange((v) => (spotLight.target.position.y = v));
+    spotFolder.add(spotSettings, 'targetZ', -20, 20, 0.1).name('Target Z').onChange((v) => (spotLight.target.position.z = v));
+    spotFolder.add(spotSettings, 'castShadow').name('Cast Shadow').onChange((v) => (spotLight.castShadow = v));
+    spotFolder.add(spotSettings, 'showHelper').name('Show Helper').onChange((v) => (spotHelper.visible = v));
+    spotFolder.add({ drag: () => attachLightForDragging(spotLight) }, 'drag').name('Drag in viewport');
+    spotFolder.add({ stop: detachLightDragging }, 'stop').name('Stop dragging');
+
+    // ---- Post Processing > Bloom ----
+    const postFolder = gui.addFolder('Post Processing');
+    const bloomFolder = postFolder.addFolder('Bloom / Glow');
+    bloomFolder.add(bloomSettings, 'enabled').name('Enabled').onChange((v) => (bloomPass.enabled = v));
+    bloomFolder.add(bloomSettings, 'strength', 0, 3, 0.01).name('Glow Intensity').onChange((v) => (bloomPass.strength = v));
+    bloomFolder.add(bloomSettings, 'radius', 0, 1, 0.01).name('Glow Spread (Radius)').onChange((v) => (bloomPass.radius = v));
+    bloomFolder.add(bloomSettings, 'threshold', 0, 1, 0.01).name('Glow Threshold').onChange((v) => (bloomPass.threshold = v));
+
+    // ---- Post Processing > Color Grading ----
+    const gradeFolder = postFolder.addFolder('Color Grading');
+    gradeFolder.add(colorGradeSettings, 'brightness', -0.5, 0.5, 0.005).name('Brightness').onChange((v) => (colorGradePass.uniforms.brightness.value = v));
+    gradeFolder.add(colorGradeSettings, 'contrast', 0, 2, 0.01).name('Contrast').onChange((v) => (colorGradePass.uniforms.contrast.value = v));
+    gradeFolder.add(colorGradeSettings, 'saturation', 0, 2, 0.01).name('Saturation').onChange((v) => (colorGradePass.uniforms.saturation.value = v));
+    gradeFolder.add(colorGradeSettings, 'hue', -Math.PI, Math.PI, 0.01).name('Hue Shift').onChange((v) => (colorGradePass.uniforms.hue.value = v));
+    gradeFolder.add(colorGradeSettings, 'exposure', -2, 2, 0.01).name('Exposure').onChange((v) => (colorGradePass.uniforms.exposure.value = v));
+    gradeFolder.add(colorGradeSettings, 'vignette', 0, 1.5, 0.01).name('Vignette').onChange((v) => (colorGradePass.uniforms.vignette.value = v));
+
+    // ---- Camera ----
+    const camFolder = gui.addFolder('Camera');
+    camFolder.add(camSettings, 'fov', 10, 120, 1).name('FOV').onChange((v) => {
+      camera.fov = v;
+      camera.updateProjectionMatrix();
+    });
+    camFolder.add(camSettings, 'posX', -30, 30, 0.01).name('Position X').listen().onChange(applyCamPos);
+    camFolder.add(camSettings, 'posY', -30, 30, 0.01).name('Position Y').listen().onChange(applyCamPos);
+    camFolder.add(camSettings, 'posZ', -30, 30, 0.01).name('Position Z').listen().onChange(applyCamPos);
+    camFolder.add(camSettings, 'targetX', -30, 30, 0.01).name('Look-At X').listen().onChange(applyCamTarget);
+    camFolder.add(camSettings, 'targetY', -30, 30, 0.01).name('Look-At Y').listen().onChange(applyCamTarget);
+    camFolder.add(camSettings, 'targetZ', -30, 30, 0.01).name('Look-At Z').listen().onChange(applyCamTarget);
+    camFolder.add(camSettings, 'flySpeed', 0.5, 15, 0.1).name('Fly Speed');
+
+    function applyCamPos() {
+      camera.position.set(camSettings.posX, camSettings.posY, camSettings.posZ);
+    }
+    function applyCamTarget() {
+      controls.target.set(camSettings.targetX, camSettings.targetY, camSettings.targetZ);
+    }
+
+    modelsFolder.open();
+    sceneFolder.open();
+    lightFolder.open();
+    spotFolder.open();
+    postFolder.open();
+    camFolder.open();
+
+    /* --------------------------------------------------------------------- */
+    /*  WASD / QE FLY MOVEMENT (layered on top of OrbitControls)              */
+    /* --------------------------------------------------------------------- */
+
+    const keys = {};
+    window.addEventListener('keydown', (e) => (keys[e.code] = true));
+    window.addEventListener('keyup', (e) => (keys[e.code] = false));
+
+    const forward = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    const moveDelta = new THREE.Vector3();
+    const up = new THREE.Vector3(0, 1, 0);
+
+    function updateFlyMovement(dt) {
+      const speed = camSettings.flySpeed * dt;
+      let moved = false;
+      moveDelta.set(0, 0, 0);
+
+      camera.getWorldDirection(forward);
+      forward.y = 0;
+      forward.normalize();
+      right.crossVectors(forward, up).normalize();
+
+      if (keys['KeyW']) { moveDelta.addScaledVector(forward, speed); moved = true; }
+      if (keys['KeyS']) { moveDelta.addScaledVector(forward, -speed); moved = true; }
+      if (keys['KeyA']) { moveDelta.addScaledVector(right, -speed); moved = true; }
+      if (keys['KeyD']) { moveDelta.addScaledVector(right, speed); moved = true; }
+      if (keys['KeyE']) { moveDelta.y += speed; moved = true; }
+      if (keys['KeyQ']) { moveDelta.y -= speed; moved = true; }
+
+      if (moved) {
+        camera.position.add(moveDelta);
+        controls.target.add(moveDelta);
+      }
+    }
+
+    /* --------------------------------------------------------------------- */
+    /*  RESIZE                                                                */
+    /* --------------------------------------------------------------------- */
+
+    window.addEventListener('resize', () => {
+      const w = window.innerWidth, h = window.innerHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+      composer.setSize(w, h);
+      bloomPass.setSize(w, h);
+    });
+
+    /* --------------------------------------------------------------------- */
+    /*  ANIMATE LOOP                                                          */
+    /* --------------------------------------------------------------------- */
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.1);
+
+      updateStartupSequence(dt);
+      if (!startupSequence.active && cinematicSequence.phase === 'idle' && !frameOnePreloader.active) updateFlyMovement(dt);
+      updateCinematicSequence(dt);
+      updateLightSweep(dt);
+      controls.update();
+
+      modelEntries.forEach((entry) => { if (entry.mixer) entry.mixer.update(dt); });
+      spotHelper.update();
+      keyHelper.update();
+
+      keySettings.targetZ = parseFloat(keyLight.target.position.z.toFixed(2));
+      spotSettings.posZ = parseFloat(spotLight.position.z.toFixed(2));
+
+      // sync GUI display fields from live camera state
+      camSettings.fov = parseFloat(camera.fov.toFixed(2));
+      camSettings.posX = parseFloat(camera.position.x.toFixed(2));
+      camSettings.posY = parseFloat(camera.position.y.toFixed(2));
+      camSettings.posZ = parseFloat(camera.position.z.toFixed(2));
+      camSettings.targetX = parseFloat(controls.target.x.toFixed(2));
+      camSettings.targetY = parseFloat(controls.target.y.toFixed(2));
+      camSettings.targetZ = parseFloat(controls.target.z.toFixed(2));
+
+      composer.render();
+    }
+
+    animate();
+  </script>
+</body>
+
+</html>

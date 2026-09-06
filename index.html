@@ -75,6 +75,51 @@
       }
     }
 
+    #enterPrompt {
+      position: absolute;
+      bottom: 18vh;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.8s ease;
+      cursor: pointer;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #enterPrompt.is-ready {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .enter-prompt__label {
+      font-family: 'Tipo Metro CDMX', sans-serif;
+      font-weight: 300;
+      font-size: clamp(10px, 1.1vw, 13px);
+      letter-spacing: 0.28em;
+      text-indent: 0.28em;
+      text-transform: uppercase;
+      color: rgba(238, 247, 255, 0.5);
+      animation: enter-breathe 2.4s ease-in-out infinite;
+    }
+
+    .enter-prompt__line {
+      width: 1px;
+      height: 36px;
+      background: linear-gradient(to bottom, rgba(238,247,255,0.0), rgba(238,247,255,0.45), rgba(238,247,255,0.0));
+      animation: enter-breathe 2.4s ease-in-out infinite;
+    }
+
+    @keyframes enter-breathe {
+      0%, 100% { opacity: 0.4; }
+      50%       { opacity: 1; }
+    }
+
     /* ------------------------------------------------------------------- */
     /*  BRAND TYPEFACE                                                       */
     /*  Drop TipoMetroCDMX-Regular.otf and TipoMetroCDMX-Light.otf in the    */
@@ -349,6 +394,10 @@
   </div>
   <div id="startupLoader">
     <div class="startup-loader__text" data-label="LOADING">SOCIETY OF VISUAL ORIGINATORS</div>
+    <div id="enterPrompt" role="button" aria-label="Enter experience" tabindex="0">
+      <div class="enter-prompt__line"></div>
+      <div class="enter-prompt__label">Enter</div>
+    </div>
   </div>
 
   <script type="importmap">
@@ -596,6 +645,7 @@
       ready: false,
     };
     const startupLoader = document.getElementById('startupLoader');
+    const enterPromptEl = document.getElementById('enterPrompt');
 
     /* --------------------------------------------------------------------- */
     /*  FRAME ONE HUD — typewriter headline + viewfinder chrome               */
@@ -618,6 +668,101 @@
     const hudTimecodeEl = document.getElementById('hudTimecode');
     const shutterFlashEl = document.getElementById('shutterFlash');
 
+    /* ------------------------------------------------------------------ */
+    /*  AUDIO — ambient music + SFX + mobile haptics                       */
+    /* ------------------------------------------------------------------ */
+    // Ambient track — fades in when Frame 1 starts, fades out on exit
+    const ambientMusic = new Audio('Ken Lusk - Holographic Origins [SpaceAmbient Channel] - SpaceAmbient.mp3');
+    ambientMusic.loop = true;
+    ambientMusic.volume = 0;
+    ambientMusic.preload = 'auto';
+
+    // Computer processing SFX — loops during typewriter, stops when done
+    const typeSFX = new Audio('samuelfjohanns-computer-processing-sound-effect-01-122131.mp3');
+    typeSFX.loop = true;
+    typeSFX.volume = 0.55;
+    typeSFX.preload = 'auto';
+
+    // ------------------------------------------------------------------
+    // Browser autoplay unlock
+    // Browsers block audio.play() unless triggered by a user gesture.
+    // We create a silent AudioContext; the first click/touch resumes it,
+    // which also unlocks HTMLAudioElement playback in the same tab.
+    // Any play calls queued before that gesture are flushed immediately.
+    // ------------------------------------------------------------------
+    let _audioUnlocked = false;
+    const _audioQueue = [];   // fns to call once unlocked
+
+    const _unlockCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function _flushAudioQueue() {
+      if (_audioUnlocked) return;
+      _audioUnlocked = true;
+      _unlockCtx.resume();
+      // Play a silent buffer — this is the classic iOS/Chrome unlock trick
+      const buf = _unlockCtx.createBuffer(1, 1, 22050);
+      const src = _unlockCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(_unlockCtx.destination);
+      src.start(0);
+      _audioQueue.forEach(fn => fn());
+      _audioQueue.length = 0;
+    }
+
+    // Listen for ANY user gesture on the page
+    ['click', 'touchstart', 'keydown', 'pointerdown'].forEach(evt =>
+      window.addEventListener(evt, _flushAudioQueue, { once: false, capture: true })
+    );
+
+    // Wrapper: play immediately if unlocked, else queue
+    function safePlay(audioEl) {
+      if (_audioUnlocked) {
+        audioEl.play().catch(() => {});
+      } else {
+        _audioQueue.push(() => audioEl.play().catch(() => {}));
+      }
+    }
+
+    let _ambientFadeTick = null;
+
+    function fadeInAmbient(targetVol = 0.45, durationMs = 3500) {
+      if (_ambientFadeTick) clearInterval(_ambientFadeTick);
+      ambientMusic.currentTime = 0;
+      ambientMusic.volume = 0;
+      safePlay(ambientMusic);
+      const steps = 60;
+      const stepMs = durationMs / steps;
+      const delta = targetVol / steps;
+      _ambientFadeTick = setInterval(() => {
+        ambientMusic.volume = Math.min(ambientMusic.volume + delta, targetVol);
+        if (ambientMusic.volume >= targetVol) clearInterval(_ambientFadeTick);
+      }, stepMs);
+    }
+
+    function fadeOutAmbient(durationMs = 1800) {
+      if (_ambientFadeTick) clearInterval(_ambientFadeTick);
+      const steps = 40;
+      const stepMs = durationMs / steps;
+      const delta = ambientMusic.volume / steps;
+      _ambientFadeTick = setInterval(() => {
+        ambientMusic.volume = Math.max(ambientMusic.volume - delta, 0);
+        if (ambientMusic.volume <= 0) {
+          clearInterval(_ambientFadeTick);
+          ambientMusic.pause();
+        }
+      }, stepMs);
+    }
+
+    function startTypeSFX() {
+      typeSFX.currentTime = 0;
+      safePlay(typeSFX);
+    }
+
+    function stopTypeSFX() {
+      typeSFX.pause();
+      typeSFX.currentTime = 0;
+    }
+
     function formatTimecode(seconds) {
       const pad = (n) => String(n).padStart(2, '0');
       const totalFrames = Math.floor(seconds * 24);
@@ -637,10 +782,12 @@
       if (frameOneTypewriterEl) frameOneTypewriterEl.textContent = '';
       if (hudTimecodeEl) hudTimecodeEl.textContent = formatTimecode(0);
       if (frameOneOverlayEl) frameOneOverlayEl.classList.remove('is-visible', 'is-leaving');
+      stopTypeSFX();
     }
 
     function finishFrameOneOverlay() {
       hudClock.running = false;
+      stopTypeSFX();
       if (frameOneHUD.shutterFlash && shutterFlashEl) {
         shutterFlashEl.classList.add('is-flashing');
         setTimeout(() => shutterFlashEl.classList.remove('is-flashing'), 280);
@@ -662,14 +809,22 @@
       hudClock.elapsed = 0;
       if (frameOneOverlayEl) frameOneOverlayEl.classList.add('is-visible');
 
+      // Start ambient music with slow fade-in
+      fadeInAmbient(0.45, 3500);
+      // Start computer SFX loop for the typewriter
+      startTypeSFX();
+
       const text = frameOneHUD.text;
       let i = 0;
       const typeNext = () => {
         if (i <= text.length) {
           if (frameOneTypewriterEl) frameOneTypewriterEl.innerHTML = text.slice(0, i).replace(/\n/g, '<br>').replace(/\bNEED\b/g, '<span class="headline-need">NEED</span>');
+          // Mobile haptic pulse on each character
+          if (i > 0 && navigator.vibrate) navigator.vibrate(8);
           i += 1;
           frameOneHUD._timer = setTimeout(typeNext, frameOneHUD.charSpeed);
         } else {
+          stopTypeSFX();
           frameOneHUD._timer = setTimeout(finishFrameOneOverlay, frameOneHUD.holdAfterTyped);
         }
       };
@@ -746,9 +901,26 @@
       startupSequence.elapsed = Math.min(startupSequence.elapsed + dt, startupSequence.duration);
       if (startupSequence.elapsed >= startupSequence.duration && startupSequence.ready) {
         startupSequence.active = false;
-        startupLoader.classList.add('is-hidden');
-        beginFrameOnePreloader();
+        // Show the "Enter" prompt — don't auto-dismiss
+        // The click is what unlocks browser audio
+        if (enterPromptEl) enterPromptEl.classList.add('is-ready');
       }
+    }
+
+    function _launchExperience() {
+      if (!enterPromptEl || !enterPromptEl.classList.contains('is-ready')) return;
+      enterPromptEl.classList.remove('is-ready');
+      // This runs inside a direct user-gesture stack → audio is unlocked here
+      _flushAudioQueue();
+      startupLoader.classList.add('is-hidden');
+      beginFrameOnePreloader();
+    }
+
+    if (enterPromptEl) {
+      enterPromptEl.addEventListener('click', _launchExperience);
+      enterPromptEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') _launchExperience();
+      });
     }
 
     function updateLightSweep(dt) {

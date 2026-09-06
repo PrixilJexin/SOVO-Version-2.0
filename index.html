@@ -50,7 +50,7 @@
 
     .startup-loader__text {
       position: relative;
-      font: 500 clamp(16px, 2vw, 24px)/1 sans-serif;
+      font: 500 clamp(16px, 2vw, 24px)/1 'Tipo Metro CDMX', sans-serif;
       letter-spacing: 4px;
       text-indent: 4px;
       text-transform: uppercase;
@@ -74,12 +74,279 @@
         background-position: 500%;
       }
     }
+
+    /* ------------------------------------------------------------------- */
+    /*  BRAND TYPEFACE                                                       */
+    /*  Drop TipoMetroCDMX-Regular.otf and TipoMetroCDMX-Light.otf in the    */
+    /*  same folder as this file for these to resolve.                      */
+    /* ------------------------------------------------------------------- */
+    @font-face {
+      font-family: 'Tipo Metro CDMX';
+      src: url('./TipoMetroCDMX-Regular.otf') format('opentype');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: 'Tipo Metro CDMX';
+      src: url('./TipoMetroCDMX-Light.otf') format('opentype');
+      font-weight: 300;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    /* ------------------------------------------------------------------- */
+    /*  SHUTTER FLASH — a single-frame photographic "click" used to punctuate*/
+    /*  the cut from Frame 1 into the Frame 2 cinematic push-in.             */
+    /* ------------------------------------------------------------------- */
+    #shutterFlash {
+      position: fixed;
+      inset: 0;
+      z-index: 250;
+      background: #fdfbff;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #shutterFlash.is-flashing {
+      animation: shutter-click 0.26s ease-out;
+    }
+
+    @keyframes shutter-click {
+      0% {
+        opacity: 0;
+      }
+
+      10% {
+        opacity: 0.85;
+      }
+
+      100% {
+        opacity: 0;
+      }
+    }
+
+    /* ------------------------------------------------------------------- */
+    /*  FRAME ONE HUD — a quiet viewfinder layer that only lives over the    */
+    /*  astronaut's held first frame: corner registration marks, a running   */
+    /*  timecode, and the typed headline.                                    */
+    /* ------------------------------------------------------------------- */
+    #frameOneOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.9s ease;
+    }
+
+    #frameOneOverlay.is-visible {
+      opacity: 1;
+    }
+
+    #frameOneOverlay.is-leaving {
+      opacity: 0;
+      transition: opacity 0.45s ease;
+    }
+
+    .hud-corner {
+      position: absolute;
+      width: clamp(18px, 2.6vw, 34px);
+      height: clamp(18px, 2.6vw, 34px);
+      border: 1px solid rgba(238, 247, 255, 0.34);
+      opacity: 0;
+      transition: opacity 1.1s ease 0.15s;
+    }
+
+    #frameOneOverlay.is-visible .hud-corner {
+      opacity: 0.34;
+      animation: hud-breathe 7s ease-in-out infinite;
+    }
+
+    .hud-corner--tl {
+      top: 4.2vh;
+      left: 3.2vw;
+      border-right: none;
+      border-bottom: none;
+      animation-delay: 0s;
+    }
+
+    .hud-corner--tr {
+      top: 4.2vh;
+      right: 3.2vw;
+      border-left: none;
+      border-bottom: none;
+      animation-delay: 1.7s;
+    }
+
+    .hud-corner--bl {
+      bottom: 4.2vh;
+      left: 3.2vw;
+      border-right: none;
+      border-top: none;
+      animation-delay: 3.4s;
+    }
+
+    .hud-corner--br {
+      bottom: 4.2vh;
+      right: 3.2vw;
+      border-left: none;
+      border-top: none;
+      animation-delay: 5.1s;
+    }
+
+    @keyframes hud-breathe {
+
+      0%,
+      100% {
+        opacity: 0.24;
+      }
+
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    .hud-timecode {
+      position: absolute;
+      top: 4.7vh;
+      right: calc(3.2vw + 46px);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: clamp(10px, 0.95vw, 13px);
+      letter-spacing: 0.09em;
+      color: rgba(238, 247, 255, 0.42);
+      opacity: 0;
+      transition: opacity 1.1s ease 0.35s;
+    }
+
+    #frameOneOverlay.is-visible .hud-timecode {
+      opacity: 1;
+    }
+
+    .frame-one-headline {
+      position: absolute;
+      left: 7vw;
+      right: 7vw;
+      bottom: 24vh;
+      max-width: 880px;
+      font-family: 'Tipo Metro CDMX', sans-serif;
+      font-weight: 300;
+      font-size: clamp(21px, 3.2vw, 44px);
+      line-height: 1.28;
+      letter-spacing: 0.01em;
+      color: #f4f1fb;
+      text-shadow: 0 0 30px rgba(255, 143, 203, 0.26), 0 0 2px rgba(255, 255, 255, 0.18);
+      text-align: left;
+    }
+
+    .headline-need {
+      display: inline-block;
+      color: #ffffff;
+      background: linear-gradient(120deg,
+          rgba(255, 143, 203, 0.0) 0%,
+          rgba(255, 220, 240, 0.95) 40%,
+          rgba(255, 255, 255, 1.0) 50%,
+          rgba(255, 220, 240, 0.95) 60%,
+          rgba(255, 143, 203, 0.0) 100%);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-size: 250% auto;
+      animation: need-shimmer 3s ease-in-out infinite, need-glow-pulse 3s ease-in-out infinite;
+      text-shadow: none;
+      filter: drop-shadow(0 0 8px rgba(255, 143, 203, 0.7)) drop-shadow(0 0 20px rgba(255, 180, 220, 0.4));
+    }
+
+    @keyframes need-shimmer {
+      0% {
+        background-position: 100% center;
+      }
+
+      50% {
+        background-position: 0% center;
+      }
+
+      100% {
+        background-position: 100% center;
+      }
+    }
+
+    @keyframes need-glow-pulse {
+
+      0%,
+      100% {
+        filter: drop-shadow(0 0 6px rgba(255, 143, 203, 0.6)) drop-shadow(0 0 18px rgba(255, 180, 220, 0.35));
+      }
+
+      50% {
+        filter: drop-shadow(0 0 14px rgba(255, 143, 203, 0.95)) drop-shadow(0 0 36px rgba(255, 200, 235, 0.6));
+      }
+    }
+
+    .frame-one-cursor {
+      display: inline-block;
+      margin-left: 2px;
+      font-weight: 300;
+      color: rgba(255, 143, 203, 0.88);
+      animation: cursor-blink 0.9s step-end infinite;
+    }
+
+    #frameOneOverlay.is-leaving .frame-one-cursor {
+      opacity: 0;
+    }
+
+    @keyframes cursor-blink {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .frame-one-headline {
+        top: 12vh;
+        bottom: auto;
+        left: 6vw;
+        right: 6vw;
+        text-align: left;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      .hud-corner,
+      .frame-one-cursor {
+        animation: none !important;
+      }
+
+      #frameOneOverlay,
+      #shutterFlash.is-flashing {
+        transition: none !important;
+        animation: none !important;
+      }
+    }
   </style>
 </head>
 
 <body>
 
   <div id="cinematicBlack"></div>
+  <div id="shutterFlash" aria-hidden="true"></div>
+  <div id="frameOneOverlay" aria-hidden="true">
+    <div class="hud-corner hud-corner--tl"></div>
+    <div class="hud-corner hud-corner--tr"></div>
+    <div class="hud-corner hud-corner--bl"></div>
+    <div class="hud-corner hud-corner--br"></div>
+    <div class="hud-timecode" id="hudTimecode">00:00:00:00</div>
+    <div class="frame-one-headline"><span id="frameOneTypewriterText"></span><span class="frame-one-cursor"
+        id="frameOneCursor">|</span></div>
+  </div>
   <div id="startupLoader">
     <div class="startup-loader__text" data-label="LOADING">SOCIETY OF VISUAL ORIGINATORS</div>
   </div>
@@ -327,10 +594,88 @@
     const frameOnePreloader = {
       active: false,
       ready: false,
-      elapsed: 0,
-      duration: 10,
     };
     const startupLoader = document.getElementById('startupLoader');
+
+    /* --------------------------------------------------------------------- */
+    /*  FRAME ONE HUD — typewriter headline + viewfinder chrome               */
+    /*  Drives the moment the camera settles on Frame 1: type the headline    */
+    /*  out character by character, hold, punctuate with a shutter flash,     */
+    /*  then hand off to the Frame 2 cinematic (playAstronautSequence).       */
+    /* --------------------------------------------------------------------- */
+    const frameOneHUD = {
+      enabled: true,
+      text: 'CREATIVE\nPEOPLE\nNEED\nCREATIVE\nPEOPLE',
+      charSpeed: 55,
+      holdAfterTyped: 1200,
+      shutterFlash: true,
+      _timer: null,
+      _started: false,
+    };
+    const hudClock = { running: false, elapsed: 0 };
+    const frameOneOverlayEl = document.getElementById('frameOneOverlay');
+    const frameOneTypewriterEl = document.getElementById('frameOneTypewriterText');
+    const hudTimecodeEl = document.getElementById('hudTimecode');
+    const shutterFlashEl = document.getElementById('shutterFlash');
+
+    function formatTimecode(seconds) {
+      const pad = (n) => String(n).padStart(2, '0');
+      const totalFrames = Math.floor(seconds * 24);
+      const ff = totalFrames % 24;
+      const totalSeconds = Math.floor(seconds);
+      const ss = totalSeconds % 60;
+      const mm = Math.floor(totalSeconds / 60) % 60;
+      const hh = Math.floor(totalSeconds / 3600);
+      return `${pad(hh)}:${pad(mm)}:${pad(ss)}:${pad(ff)}`;
+    }
+
+    function resetFrameOneOverlay() {
+      if (frameOneHUD._timer) clearTimeout(frameOneHUD._timer);
+      frameOneHUD._started = false;
+      hudClock.running = false;
+      hudClock.elapsed = 0;
+      if (frameOneTypewriterEl) frameOneTypewriterEl.textContent = '';
+      if (hudTimecodeEl) hudTimecodeEl.textContent = formatTimecode(0);
+      if (frameOneOverlayEl) frameOneOverlayEl.classList.remove('is-visible', 'is-leaving');
+    }
+
+    function finishFrameOneOverlay() {
+      hudClock.running = false;
+      if (frameOneHUD.shutterFlash && shutterFlashEl) {
+        shutterFlashEl.classList.add('is-flashing');
+        setTimeout(() => shutterFlashEl.classList.remove('is-flashing'), 280);
+      }
+      if (frameOneOverlayEl) frameOneOverlayEl.classList.add('is-leaving');
+      frameOnePreloader.active = false;
+      playAstronautSequence();
+    }
+
+    function startFrameOneOverlay() {
+      if (!frameOneHUD.enabled) {
+        frameOnePreloader.active = false;
+        playAstronautSequence();
+        return;
+      }
+      if (frameOneHUD._started) return;
+      frameOneHUD._started = true;
+      hudClock.running = true;
+      hudClock.elapsed = 0;
+      if (frameOneOverlayEl) frameOneOverlayEl.classList.add('is-visible');
+
+      const text = frameOneHUD.text;
+      let i = 0;
+      const typeNext = () => {
+        if (i <= text.length) {
+          if (frameOneTypewriterEl) frameOneTypewriterEl.innerHTML = text.slice(0, i).replace(/\n/g, '<br>').replace(/\bNEED\b/g, '<span class="headline-need">NEED</span>');
+          i += 1;
+          frameOneHUD._timer = setTimeout(typeNext, frameOneHUD.charSpeed);
+        } else {
+          frameOneHUD._timer = setTimeout(finishFrameOneOverlay, frameOneHUD.holdAfterTyped);
+        }
+      };
+      typeNext();
+    }
+
     const startupSequence = {
       active: true,
       ready: false,
@@ -342,6 +687,7 @@
     hemiLight.intensity = hemiBaseIntensity;
 
     function startIntroDescent() {
+      resetFrameOneOverlay();
       const targetPos = getFrameOnePosition();
       introDescent.startPosition.set(targetPos.x, targetPos.y + introDescent.offsetY, targetPos.z);
       introDescent.endPosition.copy(targetPos);
@@ -365,6 +711,7 @@
         camera.position.copy(introDescent.endPosition);
         animationCamera.startPosition.copy(introDescent.endPosition);
         animationCamera.startTarget.copy(frameOneTarget);
+        startFrameOneOverlay();
       }
     }
 
@@ -372,7 +719,6 @@
       const entry = findAstronautEntry();
       frameOnePreloader.ready = true;
       frameOnePreloader.active = true;
-      frameOnePreloader.elapsed = 0;
       startIntroDescent();
       keyLight.intensity = lightSweepBaseIntensity.key;
       spotLight.intensity = lightSweepBaseIntensity.spot;
@@ -408,14 +754,6 @@
     function updateLightSweep(dt) {
       if (!frameOnePreloader.ready) return;
       if (!lightSweepSettings.enabled) return;
-
-      if (frameOnePreloader.active) {
-        frameOnePreloader.elapsed = Math.min(frameOnePreloader.elapsed + dt, frameOnePreloader.duration);
-        if (frameOnePreloader.elapsed >= frameOnePreloader.duration) {
-          frameOnePreloader.active = false;
-          if (frameOnePreloader.ready) playAstronautSequence();
-        }
-      }
 
       if (lightSweepSettings.pauseRemaining > 0) {
         const pauseDuration = Math.max(0.01, lightSweepSettings.pauseDuration);
@@ -557,6 +895,9 @@
       const entry = findAstronautEntry();
       if (!entry || !entry.mixer || !entry.actions.floating) return;
 
+      if (frameOneOverlayEl) frameOneOverlayEl.classList.add('is-leaving');
+      hudClock.running = false;
+
       cinematicSequence.phase = 'camera-in';
       cinematicBlack.style.opacity = '0';
       starMaterials.forEach(({ material, opacity, size }) => {
@@ -610,6 +951,9 @@
         entry.activeAction.reset();
         entry.activeActionName = 'None';
       }
+      frameOnePreloader.active = true;
+      resetFrameOneOverlay();
+      startFrameOneOverlay();
     }
 
     function startAnimationCamera() {
@@ -1157,6 +1501,15 @@
     });
     introFolder.add({ replay: () => startIntroDescent() }, 'replay').name('Replay Descent');
 
+    // ---- Frame One HUD (typewriter headline + viewfinder chrome) ----
+    const frameOneFolder = gui.addFolder('Frame One HUD');
+    frameOneFolder.add(frameOneHUD, 'enabled').name('Enabled');
+    frameOneFolder.add(frameOneHUD, 'text').name('Headline Text');
+    frameOneFolder.add(frameOneHUD, 'charSpeed', 10, 200, 1).name('Type Speed (ms/char)');
+    frameOneFolder.add(frameOneHUD, 'holdAfterTyped', 0, 4000, 50).name('Hold After Typed (ms)');
+    frameOneFolder.add(frameOneHUD, 'shutterFlash').name('Shutter Flash on Cut');
+    frameOneFolder.add({ replay: () => { resetFrameOneOverlay(); startFrameOneOverlay(); } }, 'replay').name('Replay Typewriter');
+
     function applyCamPos() {
       camera.position.set(camSettings.posX, camSettings.posY, camSettings.posZ);
     }
@@ -1170,6 +1523,7 @@
     spotFolder.open();
     postFolder.open();
     camFolder.open();
+    frameOneFolder.open();
 
     /* --------------------------------------------------------------------- */
     /*  WASD / QE FLY MOVEMENT (layered on top of OrbitControls)              */
@@ -1256,6 +1610,11 @@
       modelEntries.forEach((entry) => { if (entry.mixer) entry.mixer.update(dt); });
       spotHelper.update();
       keyHelper.update();
+
+      if (hudClock.running) {
+        hudClock.elapsed += dt;
+        if (hudTimecodeEl) hudTimecodeEl.textContent = formatTimecode(hudClock.elapsed);
+      }
 
       keySettings.targetZ = parseFloat(keyLight.target.position.z.toFixed(2));
       spotSettings.posZ = parseFloat(spotLight.position.z.toFixed(2));
